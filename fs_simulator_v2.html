@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KernelFS — OS File System Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg0: #f0f2f7;
+  --bg1: #ffffff;
+  --bg2: #f7f8fc;
+  --bg3: #eef0f6;
+  --bg4: #e4e7f0;
+  --bg5: #d4d8e8;
+  --border: rgba(0,0,0,0.07);
+  --border2: rgba(0,0,0,0.13);
+  --text: #1a1d2e;
+  --text2: #4a5070;
+  --text3: #8890aa;
+  --green: #0a9e5c;
+  --green2: #007a44;
+  --red: #d93025;
+  --red2: #b01c12;
+  --amber: #c47a00;
+  --amber2: #9a5e00;
+  --blue: #1a6fd4;
+  --blue2: #0d4fa0;
+  --purple: #7c3aed;
+  --purple2: #5b21b6;
+  --cyan: #0891b2;
+  --pink: #c026a0;
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Orbitron', monospace;
+  --shadow: 0 1px 4px rgba(0,0,0,0.08);
+  --shadow2: 0 2px 12px rgba(0,0,0,0.1);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg0); color: var(--text); font-family: var(--mono); font-size: 12px; overflow: hidden; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg3); }
+::-webkit-scrollbar-thumb { background: var(--bg5); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+#app { display: grid; grid-template-rows: 46px 1fr; height: 100vh; }
+
+/* TOPBAR */
+#topbar {
+  background: var(--bg1); border-bottom: 1px solid var(--border2);
+  display: flex; align-items: center; padding: 0 16px; gap: 14px;
+  box-shadow: var(--shadow); flex-shrink: 0; z-index: 10;
+}
+.tb-logo { font-family: var(--display); font-size: 13px; font-weight: 900; color: var(--blue); letter-spacing: .14em; }
+.tb-logo span { color: var(--text3); }
+.tb-sep { width: 1px; height: 20px; background: var(--border2); }
+.tb-status { font-size: 10px; color: var(--text3); display: flex; align-items: center; gap: 5px; }
+.tb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px rgba(10,158,92,.2); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.tb-right { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+.tb-clock { font-size: 10px; color: var(--text3); font-family: var(--display); letter-spacing: .08em; min-width: 68px; }
+.tb-btn {
+  padding: 5px 12px; border-radius: 5px; font-size: 10px; font-family: var(--mono);
+  border: 1px solid var(--border2); background: var(--bg2); color: var(--text2);
+  cursor: pointer; letter-spacing: .05em; text-transform: uppercase; transition: all .15s; font-weight: 500;
+}
+.tb-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--text3); }
+.tb-btn.demo { border-color: rgba(192,38,160,.3); color: var(--pink); background: rgba(192,38,160,.05); }
+.tb-btn.demo:hover { background: rgba(192,38,160,.1); }
+.tb-btn.danger { border-color: rgba(217,48,37,.3); color: var(--red); }
+.tb-btn.danger:hover { background: rgba(217,48,37,.08); border-color: var(--red); }
+
+/* MAIN */
+#main { display: grid; grid-template-columns: 234px 1fr 300px; overflow: hidden; }
+
+/* SIDEBAR */
+#sidebar { background: var(--bg1); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; box-shadow: 2px 0 8px rgba(0,0,0,.04); }
+.sb-head { padding: 9px 12px 7px; font-size: 9px; color: var(--text3); letter-spacing: .14em; text-transform: uppercase; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.sb-head::after { content:''; flex:1; height:1px; background:var(--border); }
+.sb-actions { display: flex; gap: 4px; padding: 7px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sb-action-btn { flex:1; padding: 5px 4px; border-radius: 5px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; border: 1px solid var(--border2); background: var(--bg2); color: var(--text2); transition: all .15s; text-align: center; }
+.sb-action-btn:hover { background: var(--bg3); color: var(--text); }
+.sb-action-btn.create-btn { border-color: rgba(10,158,92,.3); color: var(--green); background: rgba(10,158,92,.05); }
+.sb-action-btn.create-btn:hover { background: rgba(10,158,92,.1); }
+.sb-action-btn.delete-btn { border-color: rgba(217,48,37,.3); color: var(--red); background: rgba(217,48,37,.04); }
+.sb-action-btn.delete-btn:hover { background: rgba(217,48,37,.1); }
+
+#proc-bar { display: flex; gap: 4px; padding: 7px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.proc-chip {
+  flex: 1; text-align: center; padding: 5px 4px; border-radius: 5px; font-size: 9px;
+  font-weight: 700; letter-spacing: .07em; text-transform: uppercase; cursor: pointer;
+  border: 1.5px solid transparent; transition: all .15s;
+}
+.proc-chip[data-pid="0"] { color: var(--blue); border-color: rgba(26,111,212,.2); background: rgba(26,111,212,.04); }
+.proc-chip[data-pid="0"].active { background: rgba(26,111,212,.1); border-color: var(--blue); }
+.proc-chip[data-pid="1"] { color: var(--purple); border-color: rgba(124,58,237,.2); background: rgba(124,58,237,.04); }
+.proc-chip[data-pid="1"].active { background: rgba(124,58,237,.1); border-color: var(--purple); }
+.proc-chip[data-pid="2"] { color: var(--green); border-color: rgba(10,158,92,.2); background: rgba(10,158,92,.04); }
+.proc-chip[data-pid="2"].active { background: rgba(10,158,92,.1); border-color: var(--green); }
+
+#file-list { flex: 1; overflow-y: auto; padding: 5px 7px; }
+.file-item {
+  display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 7px;
+  cursor: pointer; border: 1px solid transparent; transition: all .12s; margin-bottom: 2px;
+}
+.file-item:hover { background: var(--bg2); border-color: var(--border); }
+.file-item.selected { background: rgba(26,111,212,.06); border-color: rgba(26,111,212,.25); box-shadow: 0 0 0 1px rgba(26,111,212,.08); }
+.file-item.locked { border-color: rgba(217,48,37,.3); background: rgba(217,48,37,.04); }
+.file-item.is-dirty { border-color: rgba(196,122,0,.25); }
+.fi-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.fi-body { flex: 1; min-width: 0; }
+.fi-name { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fi-sub { font-size: 9px; color: var(--text3); margin-top: 1px; }
+.fi-badges { display: flex; gap: 2px; margin-top: 2px; flex-wrap: wrap; }
+.badge { font-size: 8px; padding: 1px 5px; border-radius: 3px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.b-open { background: rgba(26,111,212,.12); color: var(--blue); }
+.b-lock { background: rgba(217,48,37,.1); color: var(--red); }
+.b-dirty { background: rgba(196,122,0,.12); color: var(--amber); }
+.b-denied { background: rgba(124,58,237,.1); color: var(--purple); }
+
+#disk-section { border-top: 1px solid var(--border); padding: 8px 10px; flex-shrink: 0; background: var(--bg2); }
+.ds-label { font-size: 9px; color: var(--text3); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; display: flex; justify-content: space-between; }
+#disk-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; margin-bottom: 5px; }
+.disk-block { height: 10px; border-radius: 2px; background: var(--bg4); border: 1px solid var(--border); transition: all .3s; }
+.disk-block.used { background: rgba(26,111,212,.3); border-color: rgba(26,111,212,.5); }
+.disk-block.locked { background: rgba(217,48,37,.45); border-color: rgba(217,48,37,.7); animation: blink .9s infinite; }
+.disk-block.dirty { background: rgba(196,122,0,.35); border-color: rgba(196,122,0,.6); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.45} }
+.disk-legend { display: flex; gap: 8px; flex-wrap: wrap; }
+.dl-item { display: flex; align-items: center; gap: 3px; font-size: 9px; color: var(--text3); }
+.dl-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+/* CENTER */
+#center { display: flex; flex-direction: column; overflow: hidden; background: var(--bg0); }
+
+#inode-panel { background: var(--bg1); border-bottom: 1px solid var(--border); padding: 10px 14px; flex-shrink: 0; box-shadow: var(--shadow); }
+.ip-header { font-size: 9px; color: var(--text3); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 9px; display: flex; align-items: center; gap: 8px; }
+.ip-header span { color: var(--blue); font-weight: 700; font-size: 11px; font-family: var(--display); }
+.ip-header::after { content:''; flex:1; height:1px; background:var(--border); }
+#inode-attrs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.ia-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; }
+.ia-key { font-size: 8px; color: var(--text3); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
+.ia-val { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ia-val.green { color: var(--green); }
+.ia-val.red { color: var(--red); }
+.ia-val.amber { color: var(--amber); }
+.ia-val.blue { color: var(--blue); }
+.ia-val.purple { color: var(--purple); }
+.ia-val.cyan { color: var(--cyan); }
+.perm-bits { display: flex; gap: 1px; align-items: center; }
+.pb { width: 14px; height: 18px; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+.pb.on { background: rgba(10,158,92,.12); color: var(--green); border: 1px solid rgba(10,158,92,.25); }
+.pb.off { background: rgba(217,48,37,.07); color: rgba(217,48,37,.5); border: 1px solid rgba(217,48,37,.15); }
+.pb.sep { background: transparent; color: var(--text3); font-size: 8px; width: 6px; border: none; }
+
+/* FILE POINTER TRACKER */
+#fp-tracker { background: var(--bg1); border-bottom: 1px solid var(--border); padding: 8px 14px; flex-shrink: 0; }
+.fpt-header { font-size: 9px; color: var(--text3); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 7px; display: flex; align-items: center; gap: 8px; }
+.fpt-header::after { content:''; flex:1; height:1px; background:var(--border); }
+#fp-tracks { display: flex; flex-direction: column; gap: 5px; }
+.fp-track { display: flex; align-items: center; gap: 8px; }
+.fp-proc-label { font-size: 9px; font-weight: 700; min-width: 52px; text-transform: uppercase; letter-spacing: .05em; }
+.fp-bar-wrap { flex: 1; height: 16px; background: var(--bg3); border-radius: 4px; position: relative; overflow: hidden; border: 1px solid var(--border); }
+.fp-bar-fill { height: 100%; border-radius: 4px; transition: width .35s cubic-bezier(.4,0,.2,1); position: absolute; top: 0; left: 0; opacity: .45; }
+.fp-needle { position: absolute; top: 0; height: 100%; width: 2px; border-radius: 1px; transition: left .35s cubic-bezier(.4,0,.2,1); }
+.fp-pct { font-size: 9px; font-weight: 700; min-width: 32px; text-align: right; }
+.fp-bytes { font-size: 9px; color: var(--text3); min-width: 60px; }
+.fp-empty { font-size: 10px; color: var(--text3); font-style: italic; }
+
+/* OPS BAR */
+#ops-bar { background: var(--bg1); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
+.ops-label { font-size: 9px; color: var(--text3); letter-spacing: .1em; text-transform: uppercase; margin-right: 3px; }
+.op-btn {
+  padding: 5px 11px; border-radius: 5px; font-size: 10px; font-family: var(--mono); font-weight: 500;
+  border: 1px solid var(--border2); background: var(--bg2); color: var(--text2);
+  cursor: pointer; transition: all .12s; letter-spacing: .02em;
+}
+.op-btn:hover:not(:disabled) { background: var(--bg3); transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+.op-btn:disabled { opacity: .3; cursor: not-allowed; }
+.op-btn:active:not(:disabled) { transform: scale(.96) translateY(0); }
+.op-open:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: rgba(26,111,212,.06); }
+.op-read:hover:not(:disabled) { border-color: var(--green); color: var(--green); background: rgba(10,158,92,.06); }
+.op-write:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); background: rgba(196,122,0,.06); }
+.op-seek:hover:not(:disabled) { border-color: var(--purple); color: var(--purple); background: rgba(124,58,237,.06); }
+.op-lock:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: rgba(217,48,37,.06); }
+.op-close:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); background: rgba(8,145,178,.06); }
+.op-truncate:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); background: rgba(196,122,0,.06); }
+.op-delete:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: rgba(217,48,37,.06); }
+.op-chmod:hover:not(:disabled) { border-color: var(--purple); color: var(--purple); background: rgba(124,58,237,.06); }
+.op-create { border-color: rgba(10,158,92,.35); color: var(--green); background: rgba(10,158,92,.05); font-weight: 700; }
+.op-create:hover:not(:disabled) { border-color: var(--green); background: rgba(10,158,92,.1); }
+
+/* TABLES */
+#tables-area { flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+.tbl-pane { overflow: auto; padding: 9px 12px; border-right: 1px solid var(--border); background: var(--bg1); }
+.tbl-pane:last-child { border-right: none; }
+.tbl-head { font-size: 9px; color: var(--text3); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 7px; display: flex; align-items: center; gap: 6px; }
+.tbl-head::after { content:''; flex:1; height:1px; background:var(--border); }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 8px; color: var(--text3); letter-spacing: .08em; text-align: left; padding: 3px 6px 5px; border-bottom: 1px solid var(--border); text-transform: uppercase; white-space: nowrap; }
+td { padding: 4px 6px; border-bottom: 1px solid rgba(0,0,0,0.03); vertical-align: middle; white-space: nowrap; font-size: 11px; }
+tr:hover td { background: rgba(26,111,212,.03); }
+tr.flash td { animation: rowpop .45s ease; }
+tr.flash-red td { animation: rowred .45s ease; }
+@keyframes rowpop { 0%{background:rgba(10,158,92,.15)} 100%{background:transparent} }
+@keyframes rowred { 0%{background:rgba(217,48,37,.15)} 100%{background:transparent} }
+.cnt { display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;border-radius:4px;font-size:10px;font-weight:700;padding:0 4px; }
+.cnt-blue { background:rgba(26,111,212,.12);color:var(--blue); }
+.cnt-zero { background:var(--bg3);color:var(--text3); }
+.fp-cell { background:rgba(196,122,0,.1);color:var(--amber);border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;transition:all .2s;display:inline-block;border:1px solid rgba(196,122,0,.2); }
+.fp-cell.flash { animation:fpflash .35s ease; }
+@keyframes fpflash { 0%{background:rgba(217,48,37,.25);color:var(--red)} 100%{background:rgba(196,122,0,.1);color:var(--amber)} }
+.mode { font-size:9px;padding:2px 5px;border-radius:3px;font-weight:700; }
+.mode-rw { background:rgba(196,122,0,.1);color:var(--amber); }
+.mode-ro { background:rgba(10,158,92,.1);color:var(--green); }
+.mode-wo { background:rgba(124,58,237,.1);color:var(--purple); }
+.lock-cell { color:var(--red);font-size:10px; }
+.empty-row td { color:var(--text3);font-size:10px;text-align:center;padding:12px;font-style:italic; }
+@keyframes raceflash { 0%{background:rgba(8,145,178,.2)} 40%{background:rgba(217,48,37,.2)} 100%{background:transparent} }
+.race-anim td { animation: raceflash 1.2s ease; }
+
+/* RIGHT PANEL */
+#right { background: var(--bg1); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; box-shadow: -2px 0 8px rgba(0,0,0,.04); }
+.rp-head { padding: 7px 12px 6px; font-size: 9px; color: var(--text3); letter-spacing: .12em; text-transform: uppercase; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; background: var(--bg2); }
+.rp-head::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* MEMORY */
+#mem-section { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg2); }
+#mem-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; margin-top: 4px; }
+.mem-page { height: 12px; border-radius: 2px; background: var(--bg4); border: 1px solid var(--border); transition: all .3s; }
+.mem-page.kernel { background: rgba(124,58,237,.25); border-color: rgba(124,58,237,.4); }
+.mem-page.user { background: rgba(26,111,212,.25); border-color: rgba(26,111,212,.4); }
+.mem-page.cache { background: rgba(10,158,92,.2); border-color: rgba(10,158,92,.35); }
+.mem-page.swap { background: rgba(196,122,0,.25); border-color: rgba(196,122,0,.4); }
+
+/* RESOURCE ALLOCATION GRAPH — bigger */
+#rag-section { padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg1); }
+#rag-canvas { width: 100%; height: 160px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); display: block; }
+#rag-legend { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+.rag-leg { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--text3); }
+.rag-leg-line { width: 18px; height: 2px; border-radius: 1px; }
+#dl-status { font-size: 9px; color: var(--text3); margin-top: 4px; text-align: center; font-weight: 500; padding: 3px 8px; border-radius: 4px; }
+#dl-status.deadlock { background: rgba(192,38,160,.1); color: var(--pink); border: 1px solid rgba(192,38,160,.2); }
+
+/* LOG */
+#log-head { padding: 7px 12px 5px; font-size: 9px; color: var(--text3); letter-spacing: .12em; text-transform: uppercase; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; background: var(--bg2); }
+#log-head::after { content:''; flex:1; height:1px; background:var(--border); }
+#log-clear { font-size: 8px; color: var(--text3); background: none; border: 1px solid var(--border2); border-radius: 3px; padding: 1px 7px; cursor: pointer; font-family: var(--mono); letter-spacing: .06em; }
+#log-clear:hover { color: var(--text); border-color: var(--text3); background: var(--bg3); }
+#log-body { flex:1; overflow-y: auto; padding: 4px 6px; background: var(--bg1); }
+.le { display:flex; gap:5px; padding:2px 5px; border-radius:3px; line-height:1.65; }
+.le:hover { background: var(--bg2); }
+.le-t { color: var(--text3); min-width: 28px; flex-shrink: 0; font-size: 9px; }
+.le-p { min-width: 46px; font-weight: 700; flex-shrink: 0; font-size: 10px; }
+.le-o { min-width: 60px; flex-shrink: 0; font-size: 10px; }
+.le-m { color: var(--text2); font-size: 10px; }
+.le.err { background: rgba(217,48,37,.05); }
+.le.warn { background: rgba(196,122,0,.04); }
+.le.dead { background: rgba(192,38,160,.06); }
+.le.race { background: rgba(8,145,178,.05); }
+.le-o.open{color:var(--blue)} .le-o.read{color:var(--green)} .le-o.write{color:var(--amber)}
+.le-o.seek{color:var(--purple)} .le-o.lock{color:var(--red)} .le-o.close{color:var(--cyan)}
+.le-o.delete{color:var(--red)} .le-o.truncate{color:var(--amber)} .le-o.chmod{color:var(--purple)}
+.le-o.create{color:var(--green)} .le-o.deny{color:var(--red)} .le-o.deadlock{color:var(--pink)}
+.le-o.race{color:var(--cyan)} .le-o.error{color:var(--red)} .le-o.stat{color:var(--text3)}
+.le-o.boot{color:var(--cyan)}
+.le-p.p0{color:var(--blue)} .le-p.p1{color:var(--purple)} .le-p.p2{color:var(--green)}
+.le-p.kernel { color: var(--text3); font-weight: 400; }
+
+/* CREATE PANEL */
+#create-bar { display:none; padding:7px 14px; background:var(--bg2); border-bottom:1px solid var(--border); align-items:center; gap:8px; flex-shrink:0; }
+#create-bar.show { display:flex; }
+#new-filename { background:var(--bg1); border:1.5px solid rgba(10,158,92,.4); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:11px; padding:5px 10px; width:150px; outline:none; }
+#new-filename:focus { border-color:var(--green); box-shadow:0 0 0 2px rgba(10,158,92,.1); }
+#new-filetype { background:var(--bg1); border:1px solid var(--border2); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:11px; padding:4px 8px; outline:none; }
+.create-ok { padding:5px 14px; border-radius:5px; background:rgba(10,158,92,.1); border:1px solid rgba(10,158,92,.35); color:var(--green); font-family:var(--mono); font-size:10px; cursor:pointer; font-weight:700; }
+.create-ok:hover { background:rgba(10,158,92,.18); }
+.create-cancel-btn { padding:5px 10px; border-radius:5px; border:1px solid var(--border); background:transparent; color:var(--text3); font-family:var(--mono); font-size:10px; cursor:pointer; }
+
+/* MODAL */
+#modal { position:fixed;inset:0;background:rgba(10,12,30,.55);display:flex;align-items:center;justify-content:center;z-index:500;opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(6px); }
+#modal.show { opacity:1;pointer-events:all; }
+.modal-card { background:var(--bg1);border:1px solid var(--border2);border-radius:14px;padding:26px 30px;max-width:500px;width:92%;transform:scale(.94) translateY(10px);transition:transform .2s;box-shadow:0 24px 80px rgba(0,0,0,.18); }
+#modal.show .modal-card { transform:scale(1) translateY(0); }
+.mc-tag { font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;margin-bottom:8px;padding:3px 8px;border-radius:4px;display:inline-block; }
+.mc-tag.err { color:var(--red);background:rgba(217,48,37,.1);border:1px solid rgba(217,48,37,.2); }
+.mc-tag.warn { color:var(--amber);background:rgba(196,122,0,.1);border:1px solid rgba(196,122,0,.2); }
+.mc-tag.dead { color:var(--pink);background:rgba(192,38,160,.1);border:1px solid rgba(192,38,160,.2); }
+.mc-tag.race { color:var(--cyan);background:rgba(8,145,178,.1);border:1px solid rgba(8,145,178,.2); }
+.mc-tag.info { color:var(--blue);background:rgba(26,111,212,.1);border:1px solid rgba(26,111,212,.2); }
+.mc-title { font-size:19px;font-family:var(--display);font-weight:700;margin-bottom:12px;letter-spacing:.04em;color:var(--text);margin-top:8px; }
+.mc-body { font-size:11px;color:var(--text2);line-height:1.9;margin-bottom:18px; }
+.mc-body code { background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--green);font-size:10px;border:1px solid var(--border); }
+.mc-body strong { color:var(--text); }
+.mc-diagram { background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:12px 16px;margin:12px 0;font-size:11px;color:var(--text2);line-height:1.8; }
+.mc-footer { display:flex;gap:8px;align-items:center; }
+.mc-close { padding:8px 20px;border-radius:7px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .12s;font-weight:500; }
+.mc-close:hover { background:var(--bg3);border-color:var(--text3); }
+
+/* CHMOD MODAL */
+#chmod-modal { position:fixed;inset:0;background:rgba(10,12,30,.55);display:flex;align-items:center;justify-content:center;z-index:501;opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(4px); }
+#chmod-modal.show { opacity:1;pointer-events:all; }
+.chmod-card { background:var(--bg1);border:1.5px solid rgba(124,58,237,.3);border-radius:12px;padding:22px 26px;max-width:400px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.15); }
+.chmod-title { font-size:14px;font-family:var(--display);font-weight:700;color:var(--purple);margin-bottom:3px; }
+.chmod-sub { font-size:10px;color:var(--text3);margin-bottom:14px; }
+.chmod-bits { display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end; }
+.chmod-group { display:flex;flex-direction:column;gap:3px;align-items:center; }
+.cg-label { font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em; }
+.cg-bits { display:flex;gap:2px; }
+.cbit { width:28px;height:28px;border-radius:5px;border:1.5px solid var(--border2);background:var(--bg2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text3);transition:all .12s; }
+.cbit:hover { background:var(--bg3); }
+.cbit.active { background:rgba(10,158,92,.12);border-color:var(--green);color:var(--green); }
+.chmod-octal { font-size:22px;font-family:var(--display);color:var(--amber);margin-bottom:14px;letter-spacing:.1em; }
+.chmod-btns { display:flex;gap:8px; }
+.chmod-apply { padding:8px 20px;border-radius:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.4);color:var(--purple);font-family:var(--mono);font-size:11px;cursor:pointer;font-weight:700; }
+.chmod-apply:hover { background:rgba(124,58,237,.18); }
+.chmod-cancel { padding:8px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text3);font-family:var(--mono);font-size:11px;cursor:pointer; }
+
+/* TOOLTIP */
+.tooltip { position:fixed;background:var(--text);color:var(--bg1);border-radius:5px;padding:4px 9px;font-size:10px;pointer-events:none;z-index:800;opacity:0;transition:opacity .1s;max-width:180px;line-height:1.5; }
+.tooltip.show { opacity:1; }
+
+/* NO FILE NOTICE */
+#no-file-notice { padding:18px;text-align:center;color:var(--text3);font-size:11px;line-height:2; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="tb-logo">KERNEL<span>FS</span></div>
+    <div class="tb-sep"></div>
+    <div class="tb-status"><div class="tb-dot"></div><span id="tb-status-text">kernel 6.8.0 · ext4 · /dev/sda1 mounted</span></div>
+    <div class="tb-right">
+      <div class="tb-clock" id="tb-clock">--:--:--</div>
+      <button class="tb-btn demo" onclick="FS.demoDeadlock()">▸ Deadlock</button>
+      <button class="tb-btn demo" onclick="FS.demoRace()">▸ Race Cond.</button>
+      <button class="tb-btn danger" onclick="FS.reset()">↺ Reset FS</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div class="sb-head">filesystem · /home/student</div>
+      <div class="sb-actions">
+        <div class="sb-action-btn create-btn" onclick="FS.showCreate()">+ create</div>
+        <div class="sb-action-btn delete-btn" id="del-btn" onclick="FS.op('delete')">✕ delete</div>
+      </div>
+      <div id="proc-bar"></div>
+      <div id="file-list"></div>
+      <div id="disk-section">
+        <div class="ds-label"><span>disk blocks · /dev/sda1</span><span id="disk-usage-text"></span></div>
+        <div id="disk-grid"></div>
+        <div class="disk-legend">
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(26,111,212,.3);border:1px solid rgba(26,111,212,.5)"></div>used</div>
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(217,48,37,.45);border:1px solid rgba(217,48,37,.7)"></div>locked</div>
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(196,122,0,.35);border:1px solid rgba(196,122,0,.6)"></div>dirty</div>
+          <div class="dl-item"><div class="dl-dot" style="background:var(--bg4);border:1px solid var(--border)"></div>free</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER -->
+    <div id="center">
+      <div id="inode-panel">
+        <div class="ip-header">inode inspector · <span id="inode-filename">—</span></div>
+        <div id="inode-attrs"><div id="no-file-notice">← select a file to inspect its inode &amp; hardware attributes<br><span style="font-size:10px">choose a process above, then run operations below</span></div></div>
+      </div>
+
+      <!-- FILE POINTER TRACKER -->
+      <div id="fp-tracker">
+        <div class="fpt-header">file pointer tracker — per-process position</div>
+        <div id="fp-tracks"><div class="fp-empty">open a file to see per-process file pointers</div></div>
+      </div>
+
+      <div id="ops-bar">
+        <span class="ops-label">ops:</span>
+        <button class="op-btn op-open"     id="btn-open"     onclick="FS.op('open')"     disabled>open()</button>
+        <button class="op-btn op-read"     id="btn-read"     onclick="FS.op('read')"     disabled>read()</button>
+        <button class="op-btn op-write"    id="btn-write"    onclick="FS.op('write')"    disabled>write()</button>
+        <button class="op-btn op-seek"     id="btn-seek"     onclick="FS.op('seek')"     disabled>seek()</button>
+        <button class="op-btn op-truncate" id="btn-truncate" onclick="FS.op('truncate')" disabled>truncate()</button>
+        <button class="op-btn op-lock"     id="btn-lock"     onclick="FS.op('lock')"     disabled>lock()</button>
+        <button class="op-btn op-close"    id="btn-close"    onclick="FS.op('close')"    disabled>close()</button>
+        <button class="op-btn op-chmod"    id="btn-chmod"    onclick="FS.op('chmod')"    disabled>chmod()</button>
+        <button class="op-btn op-create" onclick="FS.showCreate()">create()</button>
+      </div>
+      <div id="create-bar">
+        <span style="font-size:10px;color:var(--green);font-weight:700">new file:</span>
+        <input id="new-filename" type="text" placeholder="filename.txt" maxlength="24">
+        <select id="new-filetype">
+          <option value="txt">text (.txt)</option>
+          <option value="mp3">audio (.mp3)</option>
+          <option value="wav">audio (.wav)</option>
+          <option value="mp4">video (.mp4)</option>
+          <option value="mkv">video (.mkv)</option>
+          <option value="bin">binary (.bin)</option>
+          <option value="log">log (.log)</option>
+          <option value="json">json (.json)</option>
+          <option value="sh">script (.sh)</option>
+        </select>
+        <button class="create-ok" onclick="FS.confirmCreate()">✓ create</button>
+        <button class="create-cancel-btn" onclick="FS.hideCreate()">cancel</button>
+      </div>
+      <div id="tables-area">
+        <div class="tbl-pane">
+          <div class="tbl-head" style="color:var(--blue)">per-process open-file table</div>
+          <table><thead><tr><th>proc</th><th>fd</th><th>file</th><th>mode</th><th>file ptr</th><th>flags</th></tr></thead>
+          <tbody id="proc-tbody"></tbody></table>
+        </div>
+        <div class="tbl-pane">
+          <div class="tbl-head" style="color:var(--purple)">system-wide open-file table</div>
+          <table><thead><tr><th>inode</th><th>file</th><th>size</th><th>open×</th><th>lock</th><th>dirty</th></tr></thead>
+          <tbody id="sys-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div id="right">
+      <div class="rp-head">memory · page cache</div>
+      <div id="mem-section">
+        <div style="font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;display:flex;justify-content:space-between"><span>virtual memory pages</span><span id="mem-usage-text"></span></div>
+        <div id="mem-grid"></div>
+        <div class="disk-legend" style="margin-top:4px">
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(124,58,237,.25);border:1px solid rgba(124,58,237,.4)"></div>kernel</div>
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(26,111,212,.25);border:1px solid rgba(26,111,212,.4)"></div>user</div>
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(10,158,92,.2);border:1px solid rgba(10,158,92,.35)"></div>cache</div>
+          <div class="dl-item"><div class="dl-dot" style="background:rgba(196,122,0,.25);border:1px solid rgba(196,122,0,.4)"></div>swap</div>
+        </div>
+      </div>
+
+      <div class="rp-head" style="color:var(--pink)">resource allocation graph</div>
+      <div id="rag-section">
+        <canvas id="rag-canvas" width="276" height="160"></canvas>
+        <div id="rag-legend">
+          <div class="rag-leg"><div class="rag-leg-line" style="background:var(--red)"></div>holds (lock)</div>
+          <div class="rag-leg"><div class="rag-leg-line" style="background:var(--blue);border-top:1px dashed var(--blue);height:0"></div>requests</div>
+          <div class="rag-leg"><div class="rag-leg-line" style="background:var(--green)"></div>open (no lock)</div>
+        </div>
+        <div id="dl-status">no open files</div>
+      </div>
+
+      <div id="log-head">kernel log<button id="log-clear" onclick="FS.clearLog()">clear</button></div>
+      <div id="log-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal" onclick="if(event.target===this)FS.closeModal()">
+  <div class="modal-card">
+    <div class="mc-tag" id="mc-tag"></div>
+    <div class="mc-title" id="mc-title"></div>
+    <div class="mc-body" id="mc-body"></div>
+    <div id="mc-diagram" style="display:none" class="mc-diagram"></div>
+    <div class="mc-footer"><button class="mc-close" onclick="FS.closeModal()">Dismiss</button></div>
+  </div>
+</div>
+
+<!-- CHMOD MODAL -->
+<div id="chmod-modal">
+  <div class="chmod-card">
+    <div class="chmod-title">chmod</div>
+    <div class="chmod-sub" id="chmod-sub">Change file permissions</div>
+    <div class="chmod-bits" id="chmod-bits"></div>
+    <div class="chmod-octal" id="chmod-octal">644</div>
+    <div class="chmod-btns">
+      <button class="chmod-apply" onclick="FS.applyChmod()">Apply</button>
+      <button class="chmod-cancel" onclick="FS.closeChmod()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const FS = (() => {
+  // ===== DATA =====
+  const FILES_INIT = [
+    { name:'kernel.log',    ext:'log',  inode:1001, type:'log',    size:8192,   perm:0b110100100, created:'2026-01-01', modified:'2026-05-05', blocks:[2,3] },
+    { name:'passwd',        ext:'',     inode:1002, type:'config', size:2048,   perm:0b110000000, created:'2026-01-01', modified:'2026-04-10', blocks:[5] },
+    { name:'image.raw',     ext:'raw',  inode:1003, type:'binary', size:524288, perm:0b110100100, created:'2026-02-14', modified:'2026-03-01', blocks:[7,8,9,10,11] },
+    { name:'script.sh',     ext:'sh',   inode:1004, type:'exec',   size:512,    perm:0b111101101, created:'2026-03-10', modified:'2026-04-20', blocks:[13] },
+    { name:'config.json',   ext:'json', inode:1005, type:'json',   size:1024,   perm:0b110100100, created:'2026-04-01', modified:'2026-05-01', blocks:[15,16] },
+    { name:'report.pdf',    ext:'pdf',  inode:1006, type:'pdf',    size:98304,  perm:0b100100100, created:'2026-03-20', modified:'2026-03-20', blocks:[18,19,20,21] },
+    { name:'notes.txt',     ext:'txt',  inode:1007, type:'text',   size:4096,   perm:0b110100100, created:'2026-04-15', modified:'2026-05-04', blocks:[23,24] },
+    { name:'database.db',   ext:'db',   inode:1008, type:'db',     size:65536,  perm:0b110000000, created:'2026-02-01', modified:'2026-05-05', blocks:[26,27,28] },
+    // Audio files
+    { name:'lecture.mp3',   ext:'mp3',  inode:1009, type:'audio',  size:5242880,perm:0b110100100, created:'2026-03-05', modified:'2026-03-05', blocks:[30,31,32,33,34,35,36,37,38,39] },
+    { name:'ambient.wav',   ext:'wav',  inode:1010, type:'audio',  size:18874368,perm:0b110100100,created:'2026-04-12', modified:'2026-04-12',blocks:[41,42,43,44,45,46,47] },
+    // Video files
+    { name:'demo_os.mp4',   ext:'mp4',  inode:1011, type:'video',  size:104857600,perm:0b110100100,created:'2026-02-20',modified:'2026-02-20',blocks:[49,50,51,52,53] },
+    { name:'lecture2.mkv',  ext:'mkv',  inode:1012, type:'video',  size:209715200,perm:0b100100100,created:'2026-01-15',modified:'2026-01-15',blocks:[55,56,57,58,59] },
+  ];
+
+  const FILE_ICONS = {
+    log:'📋', config:'⚙️', binary:'⬛', exec:'⚡', json:'{}',
+    pdf:'📑', text:'📄', db:'🗄️', audio:'🎵', video:'🎬', default:'📁',
+    mp3:'🎵', wav:'🎵', mp4:'🎬', mkv:'🎬', txt:'📄', sh:'⚡', bin:'⬛'
+  };
+  const TYPE_COLORS = {
+    log:'#1a6fd4', config:'#7c3aed', binary:'#d93025', exec:'#0a9e5c',
+    json:'#c47a00', pdf:'#c026a0', text:'#0891b2', db:'#c47a00',
+    audio:'#059669', video:'#dc2626'
+  };
+  const PROCS = [
+    { pid:0, name:'proc_A', color:'#1a6fd4', cls:'p0' },
+    { pid:1, name:'proc_B', color:'#7c3aed', cls:'p1' },
+    { pid:2, name:'proc_C', color:'#0a9e5c', cls:'p2' },
+  ];
+  const PROC_COLORS = ['#1a6fd4','#7c3aed','#0a9e5c'];
+
+  let files = FILES_INIT.map(f=>({...f,deleted:false,dirty:false}));
+  let selectedFile = null;
+  let selectedProc = 0;
+  let procTables = {0:{},1:{},2:{}};
+  let sysTable = {};
+  let fdCounter = 3;
+  let tick = 0;
+  let logEntries = [];
+  let chmodTarget = null;
+  let chmodBits = [];
+
+  // ===== INIT =====
+  function init() {
+    renderProcs(); renderFiles(); renderDisk(); renderMem();
+    renderTables(); renderFPTracker(); updateClock();
+    setInterval(updateClock, 1000);
+    drawRAG();
+    log(-1,'kernel','boot','KernelFS v2.0 · ext4 mounted · /dev/sda1');
+    log(-1,'kernel','boot',`${files.length} inodes loaded · ${DISK_BLOCKS} disk blocks`);
+  }
+  function updateClock() { document.getElementById('tb-clock').textContent = new Date().toLocaleTimeString('en-GB',{hour12:false}); }
+
+  // ===== PROCS =====
+  function renderProcs() {
+    document.getElementById('proc-bar').innerHTML = PROCS.map(p =>
+      `<div class="proc-chip" data-pid="${p.pid}" onclick="FS.selectProc(${p.pid})">${p.name}</div>`
+    ).join('');
+    updateProcChips();
+  }
+  function updateProcChips() {
+    document.querySelectorAll('.proc-chip').forEach(c => c.classList.toggle('active', +c.dataset.pid===selectedProc));
+  }
+
+  // ===== FILES =====
+  function renderFiles() {
+    const list = document.getElementById('file-list');
+    const visible = files.filter(f=>!f.deleted);
+    list.innerHTML = visible.map(f => {
+      const sys = sysTable[f.inode];
+      const isOpen = sys && sys.openCount > 0;
+      const isLocked = sys && sys.locked;
+      const inProc = procTables[selectedProc][f.inode];
+      const sel = selectedFile && selectedFile.inode === f.inode;
+      const icon = FILE_ICONS[f.ext] || FILE_ICONS[f.type] || FILE_ICONS.default;
+      const permStr = permToStr(f.perm);
+      const canAccess = canRead(f,selectedProc)||canWrite(f,selectedProc);
+      const tc = TYPE_COLORS[f.type]||'#8890aa';
+      return `<div class="file-item${sel?' selected':''}${isLocked?' locked':''}${f.dirty?' is-dirty':''}"
+          onclick="FS.selectFile(${f.inode})" title="inode:${f.inode} · ${permStr}">
+        <div class="fi-icon" style="background:${tc}15;border:1px solid ${tc}30">${icon}</div>
+        <div class="fi-body">
+          <div class="fi-name">${f.name}</div>
+          <div class="fi-sub">${fmtSize(sys?sys.size:f.size)} · ${permStr}</div>
+          <div class="fi-badges">
+            ${isOpen?`<span class="badge b-open">open×${sys.openCount}</span>`:''}
+            ${isLocked?`<span class="badge b-lock">🔒</span>`:''}
+            ${f.dirty?`<span class="badge b-dirty">dirty</span>`:''}
+            ${!canAccess?`<span class="badge b-denied">no access</span>`:''}
+            ${inProc?`<span class="badge b-open">fd=${inProc.fd}</span>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    if (!visible.length) list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:10px">no files</div>';
+    renderDisk();
+    const delBtn = document.getElementById('del-btn');
+    const canDel = selectedFile && !selectedFile.deleted && !(sysTable[selectedFile.inode]&&sysTable[selectedFile.inode].openCount>0);
+    if (delBtn) delBtn.style.opacity = canDel ? '1' : '.4';
+  }
+
+  // ===== INODE =====
+  function renderInode() {
+    const f = selectedFile;
+    const fn = document.getElementById('inode-filename');
+    const el = document.getElementById('inode-attrs');
+    if (!f) {
+      fn.textContent = '—';
+      el.innerHTML = '<div id="no-file-notice">← select a file to inspect its inode &amp; hardware attributes<br><span style="font-size:10px">choose a process above, then run operations below</span></div>';
+      return;
+    }
+    const sys = sysTable[f.inode];
+    const size = sys ? sys.size : f.size;
+    fn.textContent = f.name;
+    const permBits = renderPermBits(f.perm);
+    const octal = permToOctal(f.perm);
+    el.innerHTML = `
+      <div class="ia-card"><div class="ia-key">Name</div><div class="ia-val blue">${f.name}</div></div>
+      <div class="ia-card"><div class="ia-key">Inode #</div><div class="ia-val amber">${f.inode}</div></div>
+      <div class="ia-card"><div class="ia-key">Type</div><div class="ia-val cyan">${f.type}</div></div>
+      <div class="ia-card"><div class="ia-key">Size</div><div class="ia-val green">${fmtSize(size)}</div></div>
+      <div class="ia-card"><div class="ia-key">Disk Blocks</div><div class="ia-val" style="color:var(--text2);font-size:10px">[${f.blocks.join(',')}]</div></div>
+      <div class="ia-card" style="grid-column:span 2"><div class="ia-key">Protection · octal ${octal}</div><div class="ia-val">${permBits}</div></div>
+      <div class="ia-card"><div class="ia-key">Created</div><div class="ia-val" style="color:var(--text2);font-size:10px">${f.created}</div></div>
+      <div class="ia-card"><div class="ia-key">Modified</div><div class="ia-val" style="color:var(--text2);font-size:10px">${f.modified}</div></div>
+      <div class="ia-card"><div class="ia-key">Open Count</div><div class="ia-val ${sys&&sys.openCount>0?'blue':''}"><span class="cnt ${sys&&sys.openCount>0?'cnt-blue':'cnt-zero'}">${sys?sys.openCount:0}</span></div></div>
+      <div class="ia-card"><div class="ia-key">Lock</div><div class="ia-val ${sys&&sys.locked?'red':''}">${sys&&sys.locked?`🔒 ${PROCS[sys.lockedBy].name}`:'—'}</div></div>
+      <div class="ia-card"><div class="ia-key">Location</div><div class="ia-val" style="color:var(--text3);font-size:9px">/dev/sda1:blk${f.inode*8}</div></div>
+      <div class="ia-card"><div class="ia-key">Link Count</div><div class="ia-val" style="color:var(--text2)">1</div></div>
+      <div class="ia-card"><div class="ia-key">Dirty</div><div class="ia-val ${f.dirty?'amber':''}">${f.dirty?'yes':'no'}</div></div>
+    `;
+  }
+
+  // ===== FILE POINTER TRACKER =====
+  function renderFPTracker() {
+    const container = document.getElementById('fp-tracks');
+    const f = selectedFile;
+    if (!f) {
+      container.innerHTML = '<div class="fp-empty">open a file to see per-process file pointers</div>';
+      return;
+    }
+    const sys = sysTable[f.inode];
+    const size = sys ? sys.size : f.size;
+    if (!size) {
+      container.innerHTML = '<div class="fp-empty">file size is 0 — pointer tracking unavailable</div>';
+      return;
+    }
+    const tracks = [];
+    PROCS.forEach(p => {
+      const e = procTables[p.pid][f.inode];
+      if (!e) return;
+      const pct = size > 0 ? Math.min(100, Math.round(e.ptr / size * 100)) : 0;
+      tracks.push(`<div class="fp-track">
+        <div class="fp-proc-label" style="color:${p.color}">${p.name}</div>
+        <div class="fp-bar-wrap">
+          <div class="fp-bar-fill" style="width:${pct}%;background:${p.color}"></div>
+          <div class="fp-needle" style="left:calc(${pct}% - 1px);background:${p.color}"></div>
+        </div>
+        <div class="fp-pct" style="color:${p.color}">${pct}%</div>
+        <div class="fp-bytes">${fmtSize(e.ptr)} / ${fmtSize(size)}</div>
+      </div>`);
+    });
+    container.innerHTML = tracks.length
+      ? tracks.join('')
+      : '<div class="fp-empty">no process has this file open — use open() first</div>';
+  }
+
+  // ===== PERM HELPERS =====
+  function renderPermBits(perm) {
+    const chars=['r','w','x','r','w','x','r','w','x'];
+    let html='<div class="perm-bits">';
+    for(let i=8;i>=0;i--){
+      if(i===5||i===2) html+='<span class="pb sep">·</span>';
+      const on=(perm>>i)&1;
+      html+=`<span class="pb ${on?'on':'off'}">${on?chars[8-i]:'-'}</span>`;
+    }
+    return html+'</div>';
+  }
+  function permToStr(perm) {
+    const c=['r','w','x']; let s='';
+    for(let i=8;i>=0;i--) s+=((perm>>i)&1)?c[(8-i)%3]:'-';
+    return s;
+  }
+  function permToOctal(perm) {
+    return ((perm>>6)&7)+''+(((perm>>3)&7))+''+(perm&7);
+  }
+  function canRead(f,pid) { return pid===0?(f.perm>>6)&1:(f.perm>>3)&1; }
+  function canWrite(f,pid) { return pid===0?(f.perm>>7)&1:(f.perm>>4)&1; }
+
+  // ===== DISK =====
+  const DISK_BLOCKS = 60;
+  function renderDisk() {
+    const grid = document.getElementById('disk-grid');
+    const usedB=new Set(), lockB=new Set(), dirtyB=new Set();
+    files.filter(f=>!f.deleted).forEach(f=>{
+      f.blocks.forEach(b=>{
+        usedB.add(b);
+        if(sysTable[f.inode]&&sysTable[f.inode].locked) lockB.add(b);
+        if(f.dirty) dirtyB.add(b);
+      });
+    });
+    let used=0;
+    grid.innerHTML=Array.from({length:DISK_BLOCKS},(_,i)=>{
+      let cls='disk-block';
+      if(lockB.has(i)){cls+=' locked';used++;}
+      else if(dirtyB.has(i)){cls+=' dirty';used++;}
+      else if(usedB.has(i)){cls+=' used';used++;}
+      const f=files.find(x=>x.blocks.includes(i)&&!x.deleted);
+      const tip=f?`${f.name} (blk ${i})`:`free (blk ${i})`;
+      return `<div class="${cls}" onmouseenter="showTip(event,'${tip}')" onmouseleave="hideTip()"></div>`;
+    }).join('');
+    document.getElementById('disk-usage-text').textContent=`${used}/${DISK_BLOCKS} (${Math.round(used/DISK_BLOCKS*100)}%)`;
+  }
+
+  // ===== MEMORY =====
+  const MEM_PAGES=32;
+  function renderMem() {
+    const grid=document.getElementById('mem-grid');
+    const openCount=Object.keys(sysTable).length;
+    grid.innerHTML=Array.from({length:MEM_PAGES},(_,i)=>{
+      let cls='mem-page';
+      if(i<6) cls+=' kernel';
+      else if(i<8+Math.min(openCount*2,8)) cls+=' user';
+      else if(i<16+Math.min(openCount,6)) cls+=' cache';
+      else if(i<24+(Object.values(procTables).reduce((a,p)=>a+Object.keys(p).length,0))) cls+=' swap';
+      return `<div class="${cls}"></div>`;
+    }).join('');
+    document.getElementById('mem-usage-text').textContent=`${6+Math.min(Object.keys(sysTable).length*2,8)} pages active`;
+  }
+
+  // ===== TABLES =====
+  function renderTables() { renderProcTable(); renderSysTable(); renderMem(); renderFPTracker(); }
+
+  function renderProcTable() {
+    const tbody=document.getElementById('proc-tbody');
+    const rows=[];
+    PROCS.forEach(p=>{
+      Object.entries(procTables[p.pid]).forEach(([inode,e])=>{
+        const f=files.find(x=>x.inode==inode);
+        rows.push(`<tr id="ptr-${p.pid}-${inode}">
+          <td><span style="color:${p.color};font-weight:700">${p.name}</span></td>
+          <td style="color:var(--amber)">${e.fd}</td>
+          <td>${f?f.name:'?'}</td>
+          <td><span class="mode mode-${e.mode}">${e.mode}</span></td>
+          <td><span class="fp-cell" id="fp-${p.pid}-${inode}">${e.ptr}</span></td>
+          <td style="font-size:9px;color:var(--text3)">${e.flags&&e.flags.length?e.flags.join(' '):'—'}</td>
+        </tr>`);
+      });
+    });
+    tbody.innerHTML=rows.length?rows.join(''):`<tr class="empty-row"><td colspan="6">no open files</td></tr>`;
+  }
+
+  function renderSysTable() {
+    const tbody=document.getElementById('sys-tbody');
+    const entries=Object.entries(sysTable);
+    tbody.innerHTML=entries.length?entries.map(([inode,s])=>{
+      const f=files.find(x=>x.inode==inode);
+      return `<tr id="sys-row-${inode}">
+        <td style="color:var(--amber)">${inode}</td>
+        <td>${f?f.name:'?'}</td>
+        <td>${fmtSize(s.size)}</td>
+        <td><span class="cnt ${s.openCount>0?'cnt-blue':'cnt-zero'}">${s.openCount}</span></td>
+        <td>${s.locked?`<span class="lock-cell">🔒 ${PROCS[s.lockedBy].name}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td>${s.dirty?'<span style="color:var(--amber)">✦</span>':'<span style="color:var(--text3)">—</span>'}</td>
+      </tr>`;
+    }).join(''):`<tr class="empty-row"><td colspan="6">no files in system-wide table</td></tr>`;
+  }
+
+  // ===== OPS BUTTONS =====
+  function updateOps() {
+    const f=selectedFile, sys=f?sysTable[f.inode]:null;
+    const inProc=f?procTables[selectedProc][f.inode]:null;
+    const isOpen=sys&&sys.openCount>0, exists=f&&!f.deleted;
+    const set=(id,en)=>{const b=document.getElementById(id);if(b)b.disabled=!en;};
+    set('btn-open',   exists&&!inProc);
+    set('btn-read',   exists&&!!inProc);
+    set('btn-write',  exists&&!!inProc);
+    set('btn-seek',   exists&&!!inProc);
+    set('btn-truncate',exists&&!!inProc);
+    set('btn-lock',   exists&&!!inProc);
+    set('btn-close',  exists&&!!inProc);
+    set('btn-chmod',  !!exists);
+  }
+
+  // ===== SELECT =====
+  function selectFile(inode) {
+    selectedFile=files.find(f=>f.inode===inode)||null;
+    renderFiles(); renderInode(); updateOps(); renderFPTracker(); drawRAG();
+    if(selectedFile) log(selectedProc,PROCS[selectedProc].name,'stat',`${selectedFile.name} · inode=${inode} · ${fmtSize(selectedFile.size)}`);
+  }
+  function selectProc(pid) {
+    selectedProc=pid; updateProcChips(); renderFiles(); renderInode(); updateOps(); renderFPTracker();
+  }
+
+  // ===== OPERATIONS =====
+  function op(opName) {
+    const f=selectedFile;
+    if(!f||f.deleted) return;
+    const pid=selectedProc, pname=PROCS[pid].name, inode=f.inode;
+    const pt=procTables[pid]; let sys=sysTable[inode];
+    switch(opName) {
+      case 'open':     doOpen(f,pid,pname,inode,pt,sys);     break;
+      case 'read':     doRead(f,pid,pname,inode,pt,sys);     break;
+      case 'write':    doWrite(f,pid,pname,inode,pt,sys);    break;
+      case 'seek':     doSeek(f,pid,pname,inode,pt,sys);     break;
+      case 'truncate': doTruncate(f,pid,pname,inode,pt,sys); break;
+      case 'lock':     doLock(f,pid,pname,inode,pt,sys);     break;
+      case 'close':    doClose(f,pid,pname,inode,pt,sys);    break;
+      case 'delete':   doDelete(f,pid,pname,inode,pt,sys);   break;
+      case 'chmod':    openChmod(f);                          return;
+    }
+    renderFiles(); renderInode(); renderTables(); updateOps(); drawRAG();
+  }
+
+  function doOpen(f,pid,pname,inode,pt,sys) {
+    if(pt[inode]){showModal('err','EBADF: Already Open',`${pname} already has <code>${f.name}</code> open with fd=${pt[inode].fd}.<br><br>The per-process table already contains an entry. Use <code>close()</code> first, or switch to a different process.`);return;}
+    if(!canRead(f,pid)&&!canWrite(f,pid)){
+      showModal('err','EACCES: Permission Denied',
+        `<strong>${pname}</strong> attempted to open <code>${f.name}</code>, but lacks sufficient permission.<br><br>`+
+        `File permissions: <code>${permToStr(f.perm)}</code> (octal: ${permToOctal(f.perm)})<br>`+
+        `As <strong>${pname}</strong> (${pid===0?'owner':'group/other'}), read bit = <strong>${canRead(f,pid)?'1':'0'}</strong>, write bit = <strong>${canWrite(f,pid)?'1':'0'}</strong><br><br>`+
+        `The kernel checks permission bits on every <code>open(2)</code> syscall before allocating a file descriptor.`,
+        `Use <code>chmod()</code> to set the appropriate bits, then retry.`);
+      log(pid,pname,'deny',`EACCES open(${f.name}) — perm:${permToOctal(f.perm)}`,'err');
+      flashFileRed(inode); return;
+    }
+    const mode=canWrite(f,pid)?(canRead(f,pid)?'rw':'wo'):'ro';
+    if(!sysTable[inode]) sysTable[inode]={openCount:0,locked:false,lockedBy:null,dirty:false,size:f.size};
+    sysTable[inode].openCount++;
+    const fd=fdCounter++;
+    pt[inode]={fd,mode,ptr:0,flags:[]};
+    log(pid,pname,'open',`${f.name} → fd=${fd} mode=${mode} count=${sysTable[inode].openCount}`);
+    flashRow(inode);
+  }
+
+  function doRead(f,pid,pname,inode,pt,sys) {
+    if(!pt[inode])return;
+    if(!canRead(f,pid)){
+      showModal('err','EACCES: Read Denied',`<strong>${pname}</strong> cannot read <code>${f.name}</code>.<br><br>Permission string: <code>${permToStr(f.perm)}</code><br>The 'r' bit is <strong>off</strong> for this process's access level.`,`Use <code>chmod()</code> to enable the read bit.`);
+      log(pid,pname,'deny',`EACCES read(${f.name}) — r-bit=0`,'err'); return;
+    }
+    if(sys&&sys.locked&&sys.lockedBy!==pid){
+      showModal('err','EAGAIN: Blocked by Lock',`<code>${f.name}</code> is exclusively locked by <strong>${PROCS[sys.lockedBy].name}</strong>.<br><br><strong>${pname}</strong>'s <code>read(2)</code> syscall is blocking — the kernel has it in a wait queue until the lock releases.`);
+      log(pid,pname,'error',`EAGAIN read(${f.name}) — locked by ${PROCS[sys.lockedBy].name}`,'err'); return;
+    }
+    const size=sys?sys.size:f.size;
+    const remaining=size-pt[inode].ptr;
+    if(remaining<=0){
+      showModal('warn','EOF Reached',`<strong>${pname}</strong> has reached end-of-file on <code>${f.name}</code>.<br><br>File pointer: ${pt[inode].ptr} / ${size} bytes (100%). Use <code>seek()</code> to reposition.`);
+      log(pid,pname,'read',`${f.name} — EOF reached`,'warn'); return;
+    }
+    const bytes=Math.min(Math.max(256,Math.floor(size*0.08)),remaining);
+    pt[inode].ptr+=bytes;
+    log(pid,pname,'read',`${f.name} — ${fmtSize(bytes)} read · ptr→${pt[inode].ptr}`);
+    flashFP(pid,inode);
+  }
+
+  function doWrite(f,pid,pname,inode,pt,sys) {
+    if(!pt[inode]||!sys)return;
+    if(!canWrite(f,pid)){
+      showModal('err','EACCES: Write Denied',`<strong>${pname}</strong> cannot write to <code>${f.name}</code>.<br><br>Permission: <code>${permToStr(f.perm)}</code> — write bit is <strong>off</strong> for this process.`,`Use <code>chmod()</code> to add write permission.`);
+      log(pid,pname,'deny',`EACCES write(${f.name}) — w-bit=0`,'err'); return;
+    }
+    if(sys.locked&&sys.lockedBy!==pid){
+      showModal('err','EAGAIN: Write Blocked',`<code>${f.name}</code> is exclusively locked by <strong>${PROCS[sys.lockedBy].name}</strong>.<br><br>Write blocked to preserve data integrity. This is the correct behavior of advisory locking.`);
+      log(pid,pname,'error',`EAGAIN write(${f.name}) — locked by ${PROCS[sys.lockedBy].name}`,'err'); return;
+    }
+    // Race condition detection
+    const others=Object.entries(procTables).filter(([p,t])=>+p!==pid&&t[inode]&&t[inode].mode.includes('w'));
+    if(others.length){
+      const names=others.map(([p])=>PROCS[p].name).join(', ');
+      setTimeout(()=>{
+        showModal('race','⚡ Race Condition Detected',
+          `<strong>${pname}</strong> and <strong>${names}</strong> are concurrently writing to <code>${f.name}</code> with <em>no lock held</em>.<br><br>`+
+          `Each has an independent file pointer. Without synchronization:<br>`+
+          `&nbsp;&nbsp;• Writes interleave non-atomically<br>`+
+          `&nbsp;&nbsp;• One process overwrites another's data<br>`+
+          `&nbsp;&nbsp;• Final state is <strong>non-deterministic</strong> (TOCTOU)<br><br>`+
+          `This is why the file pointer lives in the <strong>per-process table</strong>, not the system-wide table — each process tracks its own position independently.`,
+          `Fix: use <code>flock(LOCK_EX)</code> before writing, or use <code>O_APPEND</code> flag for atomic appends.`);
+        log(pid,pname,'race',`RACE on ${f.name} — concurrent write w/ ${names}`,'race');
+        document.querySelectorAll(`#ptr-${pid}-${inode}`).forEach(r=>{r.classList.add('race-anim');setTimeout(()=>r.classList.remove('race-anim'),1500);});
+      },60);
+    }
+    const bytes=Math.floor(Math.random()*512)+128;
+    pt[inode].ptr+=bytes; sys.size+=bytes; sys.dirty=true; f.dirty=true;
+    f.modified=new Date().toISOString().slice(0,10);
+    log(pid,pname,'write',`${f.name} — ${fmtSize(bytes)} written · ptr→${pt[inode].ptr} · sz→${fmtSize(sys.size)}`,'warn');
+    flashFP(pid,inode); flashRow(inode,'warn');
+  }
+
+  function doSeek(f,pid,pname,inode,pt,sys) {
+    if(!pt[inode]||!sys)return;
+    const old=pt[inode].ptr;
+    const newPos=Math.floor(Math.random()*sys.size);
+    pt[inode].ptr=newPos;
+    log(pid,pname,'seek',`${f.name} — ptr: ${old} → ${newPos} (${Math.round(newPos/sys.size*100)}%)`);
+    flashFP(pid,inode);
+  }
+
+  function doTruncate(f,pid,pname,inode,pt,sys) {
+    if(!pt[inode]||!sys)return;
+    if(!canWrite(f,pid)){showModal('err','EACCES: Truncate Denied',`Write permission required to truncate.`);return;}
+    const old=fmtSize(sys.size);
+    sys.size=0; sys.dirty=true; f.dirty=true; pt[inode].ptr=0;
+    log(pid,pname,'truncate',`${f.name} — size reset 0 (was ${old}) · attrs preserved`,'warn');
+    flashRow(inode,'warn');
+  }
+
+  function doLock(f,pid,pname,inode,pt,sys) {
+    if(!pt[inode]||!sys)return;
+    if(sys.locked){
+      if(sys.lockedBy===pid){
+        sys.locked=false; sys.lockedBy=null;
+        log(pid,pname,'lock',`${f.name} — lock RELEASED (LOCK_UN)`);
+      } else {
+        // Check for circular wait → deadlock
+        const holder=sys.lockedBy;
+        const holderHasOtherLock=Object.entries(sysTable).some(([i,s])=>s.locked&&s.lockedBy===pid&&procTables[holder]&&procTables[holder][i]);
+        if(holderHasOtherLock){
+          showModal('dead','💀 DEADLOCK DETECTED',
+            `Circular wait between <strong>${pname}</strong> and <strong>${PROCS[holder].name}</strong>:<br><br>`+
+            `<strong>${pname}</strong> holds a lock and is waiting for <code>${f.name}</code><br>`+
+            `<strong>${PROCS[holder].name}</strong> holds <code>${f.name}</code> and is waiting for <strong>${pname}</strong>'s resource<br><br>`+
+            `<strong>All four Coffman conditions are met:</strong><br>`+
+            `&nbsp;&nbsp;① Mutual exclusion &nbsp;&nbsp;② Hold-and-wait<br>`+
+            `&nbsp;&nbsp;③ No preemption &nbsp;&nbsp;&nbsp;&nbsp;④ Circular wait`,
+            `Resolution: <code>kill -9 ${pname}</code>, or implement lock ordering / timeout via <code>flock(LOCK_EX|LOCK_NB)</code>.`);
+          log(pid,pname,'deadlock',`DEADLOCK: ${pname} ↔ ${PROCS[holder].name} circular wait`,'dead');
+        } else {
+          showModal('err','EDEADLK: Lock Blocked',`<code>${f.name}</code> is exclusively locked by <strong>${PROCS[holder].name}</strong>.<br><br><strong>${pname}</strong>'s <code>flock()</code> is blocking in the kernel wait queue until the holder releases.`);
+          log(pid,pname,'lock',`${f.name} — BLOCKED (held by ${PROCS[holder].name})`,'err');
+        }
+        return;
+      }
+    } else {
+      sys.locked=true; sys.lockedBy=pid;
+      log(pid,pname,'lock',`${f.name} — exclusive lock ACQUIRED (LOCK_EX)`);
+    }
+    flashRow(inode);
+  }
+
+  function doClose(f,pid,pname,inode,pt,sys) {
+    if(!pt[inode]||!sys)return;
+    delete pt[inode];
+    sys.openCount--;
+    if(sys.locked&&sys.lockedBy===pid){sys.locked=false;sys.lockedBy=null;}
+    const removed=sys.openCount<=0;
+    if(removed){
+      if(!sys.dirty){delete sysTable[inode];}
+      else{sys.dirty=false;f.dirty=false;log(pid,pname,'close',`${f.name} — flushing dirty pages…`,'warn');setTimeout(()=>{delete sysTable[inode];renderTables();renderFiles();renderInode();drawRAG();},700);}
+    }
+    log(pid,pname,'close',`${f.name} — fd freed · count→${sys.openCount}${removed?' · evicted from sys table':''}`);
+    if(!removed) flashRow(inode);
+  }
+
+  function doDelete(f,pid,pname,inode,pt,sys) {
+    if(sys&&sys.openCount>0){showModal('err','EBUSY: File In Use',`Cannot delete <code>${f.name}</code> — open by ${sys.openCount} process(es).<br><br>All processes must <code>close()</code> before <code>unlink()</code> can remove the directory entry.`);return;}
+    f.deleted=true; delete sysTable[inode]; selectedFile=null;
+    log(pid,pname,'delete',`${f.name} — inode ${inode} freed · directory entry erased`);
+    renderInode(); updateOps(); renderFPTracker();
+  }
+
+  // ===== CREATE =====
+  function showCreate() { document.getElementById('create-bar').classList.add('show'); document.getElementById('new-filename').focus(); }
+  function hideCreate() { document.getElementById('create-bar').classList.remove('show'); }
+  function confirmCreate() {
+    const nameEl=document.getElementById('new-filename'), typeEl=document.getElementById('new-filetype');
+    let name=nameEl.value.trim(); const ext=typeEl.value;
+    if(!name){nameEl.style.borderColor='var(--red)';return;}
+    if(!name.includes('.')) name=name+'.'+ext;
+    if(files.find(f=>f.name===name&&!f.deleted)){showModal('err','EEXIST: File Exists',`A file named <code>${name}</code> already exists in this directory.`);return;}
+    const inode=2000+Math.floor(Math.random()*900);
+    const allBlocks=files.flatMap(f=>f.blocks);
+    const freeBlocks=Array.from({length:DISK_BLOCKS},(_,i)=>i).filter(i=>!allBlocks.includes(i));
+    const numBlocks={'mp3':8,'wav':14,'mp4':20,'mkv':28}[ext]||1;
+    const blocks=freeBlocks.slice(0,Math.min(numBlocks,freeBlocks.length));
+    const typeMap={'mp3':'audio','wav':'audio','mp4':'video','mkv':'video','log':'log','json':'json','sh':'exec','bin':'binary','txt':'text'};
+    const defSizes={'mp3':3145728,'wav':8388608,'mp4':52428800,'mkv':104857600,'txt':1024,'log':2048,'json':512,'sh':256,'bin':4096};
+    const newFile={name,ext,inode,type:typeMap[ext]||'text',size:defSizes[ext]||1024,perm:0b110100100,created:new Date().toISOString().slice(0,10),modified:new Date().toISOString().slice(0,10),blocks,deleted:false,dirty:false};
+    files.push(newFile);
+    nameEl.value=''; hideCreate();
+    log(selectedProc,PROCS[selectedProc].name,'create',`${name} · inode=${inode} · perm=644 · ${fmtSize(newFile.size)}`);
+    renderFiles(); renderTables();
+  }
+
+  // ===== CHMOD =====
+  function openChmod(f) {
+    chmodTarget=f; chmodBits=Array.from({length:9},(_,i)=>(f.perm>>(8-i))&1);
+    document.getElementById('chmod-sub').textContent=`${f.name} · current: ${permToStr(f.perm)} (${permToOctal(f.perm)})`;
+    renderChmodBits(); document.getElementById('chmod-modal').classList.add('show');
+  }
+  function renderChmodBits() {
+    const labels=['Owner','Group','Others'], bits=['r','w','x'];
+    let html='';
+    for(let g=0;g<3;g++){
+      html+=`<div class="chmod-group"><div class="cg-label">${labels[g]}</div><div class="cg-bits">`;
+      for(let b=0;b<3;b++){
+        const idx=g*3+b;
+        html+=`<div class="cbit${chmodBits[idx]?' active':''}" onclick="FS.toggleChmodBit(${idx})">${bits[b]}</div>`;
+      }
+      html+=`</div></div>`;
+    }
+    document.getElementById('chmod-bits').innerHTML=html;
+    const oc=((chmodBits[0]<<2|chmodBits[1]<<1|chmodBits[2]))+''+(chmodBits[3]<<2|chmodBits[4]<<1|chmodBits[5])+''+((chmodBits[6]<<2|chmodBits[7]<<1|chmodBits[8]));
+    document.getElementById('chmod-octal').textContent=oc;
+  }
+  function toggleChmodBit(idx) { chmodBits[idx]=chmodBits[idx]?0:1; renderChmodBits(); }
+  function applyChmod() {
+    if(!chmodTarget)return;
+    let perm=0; chmodBits.forEach((b,i)=>{if(b)perm|=(1<<(8-i));});
+    const old=permToOctal(chmodTarget.perm); chmodTarget.perm=perm;
+    log(selectedProc,PROCS[selectedProc].name,'chmod',`${chmodTarget.name} · ${old} → ${permToOctal(perm)}`);
+    closeChmod(); renderFiles(); renderInode(); updateOps();
+  }
+  function closeChmod() { document.getElementById('chmod-modal').classList.remove('show'); }
+
+  // ===== DEMOS =====
+  function demoDeadlock() {
+    const fA=files.find(f=>!f.deleted&&f.inode===1007);
+    const fB=files.find(f=>!f.deleted&&f.inode===1005);
+    if(!fA||!fB){showModal('info','Demo Unavailable','notes.txt or config.json are missing or deleted.');return;}
+    if(!sysTable[fA.inode]) sysTable[fA.inode]={openCount:0,locked:false,lockedBy:null,dirty:false,size:fA.size};
+    if(!sysTable[fB.inode]) sysTable[fB.inode]={openCount:0,locked:false,lockedBy:null,dirty:false,size:fB.size};
+    if(!procTables[0][fA.inode]){sysTable[fA.inode].openCount++;procTables[0][fA.inode]={fd:fdCounter++,mode:'rw',ptr:0,flags:[]};}
+    if(!procTables[1][fB.inode]){sysTable[fB.inode].openCount++;procTables[1][fB.inode]={fd:fdCounter++,mode:'rw',ptr:0,flags:[]};}
+    sysTable[fA.inode].locked=true; sysTable[fA.inode].lockedBy=0;
+    sysTable[fB.inode].locked=true; sysTable[fB.inode].lockedBy=1;
+    log(0,'proc_A','lock',`${fA.name} — ACQUIRED`);
+    log(1,'proc_B','lock',`${fB.name} — ACQUIRED`);
+    setTimeout(()=>{
+      showModal('dead','💀 DEADLOCK DEMONSTRATION',
+        `<strong>proc_A</strong> holds lock on <code>notes.txt</code>, wants <code>config.json</code><br>`+
+        `<strong>proc_B</strong> holds lock on <code>config.json</code>, wants <code>notes.txt</code><br><br>`+
+        `<strong>Circular wait — neither can proceed.</strong>`,
+        `proc_A ──[holds]──▶ notes.txt ──[wanted by]──▶ proc_B<br>`+
+        `proc_B ──[holds]──▶ config.json ──[wanted by]──▶ proc_A<br><br>`+
+        `OS must intervene: timeout, preemption, or rollback.`);
+      log(0,'proc_A','deadlock',`waiting for config.json (held by proc_B)`,'dead');
+      log(1,'proc_B','deadlock',`waiting for notes.txt (held by proc_A)`,'dead');
+      renderTables(); renderFiles(); renderInode(); drawRAG();
+    },400);
+    renderTables(); renderFiles(); drawRAG();
+  }
+
+  function demoRace() {
+    const f=files.find(x=>!x.deleted&&x.inode===1007);
+    if(!f){showModal('info','Demo Unavailable','notes.txt not found.');return;}
+    if(!sysTable[f.inode]) sysTable[f.inode]={openCount:0,locked:false,lockedBy:null,dirty:false,size:f.size};
+    [0,1,2].forEach(pid=>{
+      if(!procTables[pid][f.inode]){
+        sysTable[f.inode].openCount++;
+        procTables[pid][f.inode]={fd:fdCounter++,mode:'rw',ptr:Math.floor(Math.random()*f.size),flags:[]};
+        log(pid,PROCS[pid].name,'open',`${f.name} fd=${procTables[pid][f.inode].fd} — no lock!`);
+      }
+    });
+    renderTables(); renderFiles(); drawRAG();
+    setTimeout(()=>{
+      showModal('race','⚡ Race Condition — 3-Way Write',
+        `All 3 processes have <code>notes.txt</code> open for writing — with <strong>no locking</strong>.<br><br>`+
+        `Each has an independent <strong>file pointer</strong> (per-process table). Watch them diverge above.<br><br>`+
+        `&nbsp;&nbsp;• <span style="color:var(--blue)">proc_A</span> ptr: ${procTables[0][f.inode]?.ptr} bytes<br>`+
+        `&nbsp;&nbsp;• <span style="color:var(--purple)">proc_B</span> ptr: ${procTables[1][f.inode]?.ptr} bytes<br>`+
+        `&nbsp;&nbsp;• <span style="color:var(--green)">proc_C</span> ptr: ${procTables[2][f.inode]?.ptr} bytes<br><br>`+
+        `Concurrent writes → non-deterministic result → data corruption.`,
+        `Fix: <code>flock(LOCK_EX)</code> before write, or use <code>O_APPEND</code> for atomic log-style writes.`);
+      log(0,'proc_A','race',`concurrent write on ${f.name} (no sync)`,'race');
+      log(1,'proc_B','race',`concurrent write on ${f.name} (no sync)`,'race');
+      log(2,'proc_C','race',`concurrent write on ${f.name} (no sync)`,'race');
+    },200);
+  }
+
+  // ===== RESOURCE ALLOCATION GRAPH =====
+  function drawRAG() {
+    const canvas=document.getElementById('rag-canvas');
+    const ctx=canvas.getContext('2d');
+    const W=canvas.offsetWidth||276, H=160;
+    canvas.width=W; canvas.height=H;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#f7f8fc'; ctx.fillRect(0,0,W,H);
+
+    // Proc nodes — top row
+    const procNodes=PROCS.map((p,i)=>({x:40+i*(W-80)/2, y:36, color:p.color, label:p.name.slice(5), pid:p.pid}));
+
+    // File nodes — bottom row (only files that are open or locked)
+    const openInodes=[...new Set([
+      ...Object.values(procTables).flatMap(pt=>Object.keys(pt).map(Number)),
+      ...Object.keys(sysTable).map(Number)
+    ])];
+    const fileNodes=openInodes.map((inode,i,arr)=>{
+      const f=files.find(x=>x.inode==inode);
+      const sx=arr.length===1?W/2: 30+i*(W-60)/(arr.length-1);
+      return {inode, x:sx, y:130, label:f?f.name.slice(0,9):'?', sys:sysTable[inode]};
+    });
+
+    // Draw edges
+    ctx.lineWidth=1.5;
+    fileNodes.forEach(fn=>{
+      const sys=sysTable[fn.inode];
+      PROCS.forEach((p,pi)=>{
+        const e=procTables[p.pid][fn.inode];
+        if(!e) return;
+        const pn=procNodes[pi];
+        const isHolder=sys&&sys.locked&&sys.lockedBy===p.pid;
+        // Arrow from proc down to file (holds/requests)
+        const dx=fn.x-pn.x, dy=fn.y-pn.y;
+        const len=Math.sqrt(dx*dx+dy*dy);
+        const ux=dx/len, uy=dy/len;
+        const sx=pn.x+ux*14, sy=pn.y+uy*14;
+        const ex=fn.x-ux*12, ey=fn.y-uy*12;
+        ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey);
+        if(isHolder){ctx.strokeStyle='rgba(217,48,37,.7)';ctx.setLineDash([]);}
+        else{ctx.strokeStyle='rgba(26,111,212,.5)';ctx.setLineDash([4,3]);}
+        ctx.stroke(); ctx.setLineDash([]);
+        // Arrowhead
+        const ax=ex-ux*8, ay=ey-uy*8;
+        const perp=[-uy,ux];
+        ctx.beginPath();
+        ctx.moveTo(ex,ey);
+        ctx.lineTo(ax+perp[0]*4,ay+perp[1]*4);
+        ctx.lineTo(ax-perp[0]*4,ay-perp[1]*4);
+        ctx.closePath();
+        ctx.fillStyle=isHolder?'rgba(217,48,37,.7)':'rgba(26,111,212,.5)';
+        ctx.fill();
+      });
+    });
+
+    // Draw file nodes (rectangles)
+    fileNodes.forEach(fn=>{
+      const sys=sysTable[fn.inode];
+      const isLocked=sys&&sys.locked;
+      ctx.fillStyle=isLocked?'rgba(217,48,37,.12)':'rgba(26,111,212,.08)';
+      ctx.strokeStyle=isLocked?'rgba(217,48,37,.5)':'rgba(26,111,212,.3)';
+      ctx.lineWidth=1.5;
+      ctx.beginPath();
+      roundRect(ctx, fn.x-28, fn.y-10, 56, 20, 4);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle=isLocked?'#d93025':'#1a6fd4';
+      ctx.font=`600 8px 'JetBrains Mono'`;
+      ctx.textAlign='center';
+      ctx.fillText(fn.label, fn.x, fn.y+3);
+      if(isLocked){
+        ctx.font='9px sans-serif'; ctx.fillText('🔒',fn.x+20,fn.y+3);
+      }
+    });
+
+    // Draw proc nodes (circles)
+    procNodes.forEach((pn,i)=>{
+      const active=Object.keys(procTables[i]).length>0;
+      ctx.fillStyle=active?pn.color+'22':'rgba(0,0,0,.04)';
+      ctx.strokeStyle=active?pn.color:'rgba(0,0,0,.15)';
+      ctx.lineWidth=active?2:1;
+      ctx.beginPath(); ctx.arc(pn.x,pn.y,14,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle=active?pn.color:'#8890aa';
+      ctx.font=`700 9px 'JetBrains Mono'`;
+      ctx.textAlign='center';
+      ctx.fillText(pn.label, pn.x, pn.y+3);
+    });
+
+    // Labels
+    ctx.font=`500 8px 'JetBrains Mono'`;
+    ctx.fillStyle='#8890aa';
+    ctx.textAlign='left';
+    ctx.fillText('PROCESSES', 6, 12);
+    ctx.fillText('RESOURCES', 6, H-8);
+
+    // Status
+    const isDeadlock=detectDeadlock();
+    const dlEl=document.getElementById('dl-status');
+    dlEl.textContent=isDeadlock?'⚠ deadlock detected · circular wait':fileNodes.length?'no cycle detected':'no open files';
+    dlEl.className=isDeadlock?'deadlock':'';
+  }
+
+  function roundRect(ctx,x,y,w,h,r) {
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  }
+
+  function detectDeadlock() {
+    const locks=Object.entries(sysTable).filter(([,s])=>s.locked).map(([inode,s])=>({inode:+inode,holder:s.lockedBy}));
+    if(locks.length<2) return false;
+    for(const lock of locks){
+      const holder=lock.holder;
+      const others=locks.filter(l=>l.holder!==holder);
+      for(const other of others){if(procTables[holder]&&procTables[holder][other.inode]) return true;}
+    }
+    return false;
+  }
+
+  // ===== MODAL =====
+  function showModal(type,title,body,extra='') {
+    const tags={err:'⛔ kernel error',warn:'⚠ warning',dead:'💀 deadlock',race:'⚡ race condition',info:'ℹ info'};
+    document.getElementById('mc-tag').className=`mc-tag ${type}`;
+    document.getElementById('mc-tag').textContent=tags[type]||type;
+    document.getElementById('mc-title').textContent=title;
+    document.getElementById('mc-body').innerHTML=body;
+    const diag=document.getElementById('mc-diagram');
+    if(extra){diag.style.display='block';diag.innerHTML=extra;}else diag.style.display='none';
+    document.getElementById('modal').classList.add('show');
+  }
+  function closeModal() { document.getElementById('modal').classList.remove('show'); }
+
+  // ===== LOG =====
+  function log(pid,pname,op,msg,level='') {
+    const t=String(++tick).padStart(4,'0');
+    const pCls=pid>=0?PROCS[pid].cls:'kernel';
+    logEntries.unshift({t,pname,pCls,op,msg,level});
+    if(logEntries.length>300) logEntries.pop();
+    document.getElementById('log-body').innerHTML=logEntries.map(e=>
+      `<div class="le ${e.level}"><span class="le-t">${e.t}</span><span class="le-p ${e.pCls}">${e.pname}</span><span class="le-o ${e.op}">${e.op}</span><span class="le-m">${e.msg}</span></div>`
+    ).join('');
+  }
+  function clearLog() { logEntries=[]; document.getElementById('log-body').innerHTML=''; tick=0; }
+
+  // ===== FLASH =====
+  function flashRow(inode,type='ok') {
+    setTimeout(()=>{
+      const row=document.getElementById(`sys-row-${inode}`);
+      if(row){row.classList.remove('flash','flash-red');void row.offsetWidth;row.classList.add(type==='ok'?'flash':'flash-red');}
+    },60);
+  }
+  function flashFileRed(inode) {
+    const item=document.querySelector(`[onclick="FS.selectFile(${inode})"]`);
+    if(item){item.style.outline='2px solid var(--red)';setTimeout(()=>item.style.outline='',900);}
+  }
+  function flashFP(pid,inode) {
+    setTimeout(()=>{
+      const el=document.getElementById(`fp-${pid}-${inode}`);
+      if(el){el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');}
+    },60);
+    renderTables();
+  }
+
+  // ===== RESET =====
+  function reset() {
+    files=FILES_INIT.map(f=>({...f,deleted:false,dirty:false}));
+    procTables={0:{},1:{},2:{}}; sysTable={}; selectedFile=null; fdCounter=3;
+    clearLog();
+    log(-1,'kernel','boot','filesystem reset · all tables cleared');
+    renderFiles(); renderInode(); renderTables(); updateOps(); renderFPTracker(); drawRAG();
+  }
+
+  // ===== HELPERS =====
+  function fmtSize(n) {
+    if(n>=1073741824) return `${(n/1073741824).toFixed(1)}GB`;
+    if(n>=1048576) return `${(n/1048576).toFixed(1)}MB`;
+    if(n>=1024) return `${(n/1024).toFixed(1)}KB`;
+    return `${n}B`;
+  }
+
+  return {init,selectFile,selectProc,op,showCreate,hideCreate,confirmCreate,toggleChmodBit,applyChmod,closeChmod,closeModal,clearLog,reset,demoDeadlock,demoRace};
+})();
+
+// Tooltip
+function showTip(e,text){const t=document.getElementById('tooltip');t.textContent=text;t.style.left=(e.clientX+12)+'px';t.style.top=(e.clientY+12)+'px';t.classList.add('show');}
+function hideTip(){document.getElementById('tooltip').classList.remove('show');}
+
+document.getElementById('new-filename').addEventListener('keydown',e=>{if(e.key==='Enter')FS.confirmCreate();if(e.key==='Escape')FS.hideCreate();});
+window.addEventListener('resize',()=>setTimeout(()=>{try{FS.reset&&(()=>{const c=document.getElementById('rag-canvas');if(c)FS.demoRace&&window.FS&&FS.clearLog;})()}catch(ex){}},100));
+
+FS.init();
+</script>
+</body>
+</html>
