@@ -2,7 +2,7 @@
 
 A browser-based interactive simulator that demonstrates the inner workings of an operating system's file system. Built as a single-file JavaScript application with no dependencies, KernelFS lets you explore OS concepts hands-on — watching kernel tables update in real time as you perform file operations.
 
-![Light theme dashboard with sidebar filesystem, inode inspector, file pointer tracker, operations bar, per-process and system-wide tables, resource allocation graph, and kernel log](screenshot.png)
+
 
 ---
 
